@@ -1369,9 +1369,14 @@ dialog::backdrop {
 }
 
 .image-dialog {
+  position: fixed;
+  inset: 0;
   width: min(1440px, 94vw);
   max-width: none;
+  height: max-content;
+  max-height: 94vh;
   max-height: 94dvh;
+  margin: auto;
   overflow: visible;
   background: transparent;
   color: var(--p-white);
@@ -1444,7 +1449,7 @@ dialog::backdrop {
 }
 
 @keyframes marquee {
-  to { transform: translateX(-50%); }
+  to { transform: translateX(-25%); }
 }
 
 @keyframes menu-in {
@@ -1927,4 +1932,11 @@ dialog::backdrop {
   .biome-marquee > div {
     transform: none !important;
   }
+}
+
+/* Стрелки должны оставаться текстовыми символами, а не эмодзи */
+.gallery__zoom b,
+.gallery__tabs button > i,
+.back-to-top span {
+  font-variant-emoji: text;
 }
