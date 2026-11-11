@@ -506,6 +506,44 @@ html[data-theme="light"] .theme-icon--moon {
   z-index: -1;
 }
 
+@keyframes foliage-sway {
+  0%, 100% {
+    rotate: -0.35deg;
+  }
+
+  50% {
+    rotate: 0.35deg;
+  }
+}
+
+.hero__layer--foreground {
+  transform-origin: 50% 100%;
+  animation: foliage-sway 7s ease-in-out infinite;
+}
+
+/* Мягкая пульсация портала */
+@keyframes portal-pulse {
+  0%, 100% {
+    filter: brightness(0.85) saturate(1.05);
+  }
+
+  50% {
+    filter: brightness(1.20) saturate(1.28);
+  }
+}
+
+.hero__layer--portal {
+  animation: portal-pulse 4s ease-in-out infinite;
+}
+
+/* Отключение дополнительной анимации при reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .hero__layer--foreground,
+  .hero__layer--portal {
+    animation: none;
+  }
+}
+
 .hero__particles i {
   position: absolute;
   width: 4px;
