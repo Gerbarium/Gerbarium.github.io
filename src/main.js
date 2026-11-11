@@ -8,6 +8,7 @@ const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const themeToggle = document.querySelector('[data-theme-toggle]');
 const themeLabel = document.querySelector('[data-theme-label]');
 const themeColor = document.querySelector('meta[name="theme-color"]');
+const parallaxStrength = 2;
 
 function setTheme(theme, persist = false) {
   const nextTheme = theme === 'light' ? 'light' : 'dark';
@@ -130,15 +131,24 @@ function renderHero() {
   currentScroll += (scrollTarget - currentScroll) * 0.09;
 
   heroLayers.forEach((layer) => {
-    const depth = Number(layer.dataset.depth);
-    const scrollDepth = Number(layer.dataset.scroll);
-    const x = -currentX * depth * 25;
-    const y = -currentY * depth * 16 + currentScroll * scrollDepth;
-    layer.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
-  });
+  const depth = Number(layer.dataset.depth);
+  const scrollDepth = Number(layer.dataset.scroll);
 
-  const titleX = -currentX * 5;
-  const titleY = -currentY * 3 + currentScroll * 8;
+  const x = -currentX * depth * 25 * parallaxStrength;
+  const y = (
+    -currentY * depth * 16
+    + currentScroll * scrollDepth
+  ) * parallaxStrength;
+
+  layer.style.transform =
+    `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
+});
+
+const titleX = -currentX * 5 * parallaxStrength;
+const titleY = (
+  -currentY * 3
+  + currentScroll * 8
+) * parallaxStrength;
   heroContent.style.transform = `translate(-50%, -50%) translate3d(${titleX.toFixed(2)}px, ${titleY.toFixed(2)}px, 0)`;
   heroFrame = requestAnimationFrame(renderHero);
 }
