@@ -14,8 +14,8 @@
       document.documentElement.dataset.theme = 'dark';
     }
   </script>
-  <link rel="preload" href="./assets/archipelago.webp" as="image" fetchpriority="high" media="(min-width: 701px)">
-  <link rel="preload" href="./assets/archipelago-mobile.webp" as="image" fetchpriority="high" media="(max-width: 700px)">
+  <link rel="preload" href="./assets/parallax/sky.webp" as="image" fetchpriority="high">
+  <link rel="preload" href="./assets/parallax/title.webp" as="image" fetchpriority="high">
   <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
@@ -57,16 +57,14 @@
   <main>
     <section class="hero" id="top" aria-labelledby="hero-title" data-hero>
       <div class="hero__ambient" aria-hidden="true">
-        <picture>
-          <source media="(max-width: 700px)" srcset="./assets/archipelago-mobile.webp">
-          <img src="./assets/archipelago.webp" alt="" width="2048" height="1152" data-hero-ambient>
-        </picture>
+        <img src="./assets/parallax/sky.webp" alt="" width="1672" height="941">
       </div>
       <div class="hero__media" aria-hidden="true">
-        <picture>
-          <source media="(max-width: 700px)" srcset="./assets/archipelago-mobile.webp">
-          <img src="./assets/archipelago.webp" alt="" width="2048" height="1152" fetchpriority="high" data-hero-image>
-        </picture>
+        <img class="hero__layer hero__layer--sky" src="./assets/parallax/sky.webp" alt="" width="1672" height="941" fetchpriority="high" data-parallax-layer data-depth="0.15" data-scroll="36">
+        <img class="hero__layer hero__layer--landscape" src="./assets/parallax/landscape.webp" alt="" width="1672" height="941" decoding="async" data-parallax-layer data-depth="0.28" data-scroll="25">
+        <img class="hero__layer hero__layer--portal" src="./assets/parallax/portal.webp" alt="" width="1672" height="941" decoding="async" data-parallax-layer data-depth="0.48" data-scroll="12">
+        <img class="hero__layer hero__layer--ground" src="./assets/parallax/ground.webp" alt="" width="1672" height="941" decoding="async" data-parallax-layer data-depth="0.72" data-scroll="2">
+        <img class="hero__layer hero__layer--foreground" src="./assets/parallax/foreground.webp" alt="" width="1672" height="941" decoding="async" data-parallax-layer data-depth="1.35" data-scroll="-20">
       </div>
       <div class="hero__shade" aria-hidden="true"></div>
       <div class="hero__grid" aria-hidden="true"></div>
@@ -79,7 +77,7 @@
       <div class="hero__content" data-hero-content>
         <p class="hero__eyebrow"><span></span>Minecraft survival experience<span></span></p>
         <h1 class="hero__logo" id="hero-title">
-          <img src="./assets/gerbarium-wordmark.png" alt="Minecraft Gerbarium" width="2200" height="597" fetchpriority="high">
+          <img src="./assets/parallax/title.webp" alt="Minecraft Gerbarium" width="981" height="265" fetchpriority="high">
         </h1>
         <p class="hero__coming"><span aria-hidden="true">[</span> COMING SOON... <span aria-hidden="true">]</span></p>
       </div>

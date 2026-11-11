@@ -1,6 +1,7 @@
 const header = document.querySelector('[data-header]');
 const hero = document.querySelector('.hero');
-const heroImage = document.querySelector('[data-hero-image]');
+const heroLayers = [...document.querySelectorAll('[data-parallax-layer]')];
+const heroContent = document.querySelector('[data-hero-content]');
 const menuToggle = document.querySelector('[data-menu-toggle]');
 const mobileMenu = document.querySelector('[data-mobile-menu]');
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -95,18 +96,19 @@ const sectionObserver = new IntersectionObserver((entries) => {
 
 observedSections.forEach((section) => sectionObserver.observe(section));
 
-// A restrained, pointer- and scroll-driven camera drift keeps the key art alive.
+// Семь плоскостей создают 2.5D-глубину без WebGL и тяжёлых библиотек.
 let pointerX = 0;
 let pointerY = 0;
 let currentX = 0;
 let currentY = 0;
 let currentScroll = 0;
+let heroFrame = 0;
 
 hero.addEventListener('pointermove', (event) => {
   if (reduceMotion.matches || event.pointerType === 'touch') return;
   const rect = hero.getBoundingClientRect();
-  pointerX = ((event.clientX - rect.left) / rect.width - 0.5) * 14;
-  pointerY = ((event.clientY - rect.top) / rect.height - 0.5) * 10;
+  pointerX = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+  pointerY = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
 });
 
 hero.addEventListener('pointerleave', () => {
@@ -115,17 +117,38 @@ hero.addEventListener('pointerleave', () => {
 });
 
 function renderHero() {
-  if (!reduceMotion.matches) {
-    const scrollTarget = Math.min(window.scrollY / Math.max(hero.offsetHeight, 1), 1) * -24;
-    currentX += (pointerX - currentX) * 0.055;
-    currentY += (pointerY - currentY) * 0.055;
-    currentScroll += (scrollTarget - currentScroll) * 0.08;
-    heroImage.style.transform = `translate3d(${currentX.toFixed(2)}px, ${(currentY + currentScroll).toFixed(2)}px, 0) scale(1.055)`;
+  if (reduceMotion.matches) {
+    heroLayers.forEach((layer) => { layer.style.transform = ''; });
+    heroContent.style.transform = '';
+    heroFrame = 0;
+    return;
   }
-  requestAnimationFrame(renderHero);
+
+  const scrollTarget = Math.min(Math.max(window.scrollY / Math.max(hero.offsetHeight, 1), 0), 1);
+  currentX += (pointerX - currentX) * 0.075;
+  currentY += (pointerY - currentY) * 0.075;
+  currentScroll += (scrollTarget - currentScroll) * 0.09;
+
+  heroLayers.forEach((layer) => {
+    const depth = Number(layer.dataset.depth);
+    const scrollDepth = Number(layer.dataset.scroll);
+    const x = -currentX * depth * 25;
+    const y = -currentY * depth * 16 + currentScroll * scrollDepth;
+    layer.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
+  });
+
+  const titleX = -currentX * 5;
+  const titleY = -currentY * 3 + currentScroll * 8;
+  heroContent.style.transform = `translate(-50%, -50%) translate3d(${titleX.toFixed(2)}px, ${titleY.toFixed(2)}px, 0)`;
+  heroFrame = requestAnimationFrame(renderHero);
 }
 
-requestAnimationFrame(renderHero);
+function startHeroMotion() {
+  if (!heroFrame) heroFrame = requestAnimationFrame(renderHero);
+}
+
+startHeroMotion();
+reduceMotion.addEventListener('change', startHeroMotion);
 
 const gallery = document.querySelector('[data-gallery]');
 const slides = [...gallery.querySelectorAll('[data-slide]')];
