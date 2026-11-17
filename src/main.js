@@ -1,400 +1,553 @@
+const clamp = (value, min = 0, max = 1) => Math.min(Math.max(value, min), max);
+const easeOut = value => 1 - Math.pow(1 - clamp(value), 3);
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const mobile = window.matchMedia('(max-width: 767px)');
+
+/* Header and accessible mobile navigation */
 const header = document.querySelector('[data-header]');
-const hero = document.querySelector('.hero');
+const menu = document.querySelector('[data-mobile-menu]');
+const menuOpen = document.querySelector('[data-menu-open]');
+const menuCloseButtons = [...document.querySelectorAll('[data-menu-close]')];
+let menuReturnFocus = null;
+
+function setMenu(open) {
+  if (!menu || !menuOpen) return;
+  if (!open && menuReturnFocus) menuReturnFocus.focus();
+  menu.classList.toggle('is-open', open);
+  menu.setAttribute('aria-hidden', String(!open));
+  menuOpen.setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('menu-open', open);
+  if (open) {
+    menuReturnFocus = document.activeElement;
+    menu.querySelector('.mobile-menu__panel button, .mobile-menu__panel a')?.focus();
+  }
+}
+menuOpen?.addEventListener('click', () => setMenu(true));
+menuCloseButtons.forEach(button => button.addEventListener('click', () => setMenu(false)));
+menu?.querySelectorAll('a').forEach(link => link.addEventListener('click', () => setMenu(false)));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && menu?.classList.contains('is-open')) setMenu(false);
+  if (event.key === 'Tab' && menu?.classList.contains('is-open')) {
+    const focusable = [...menu.querySelectorAll('.mobile-menu__panel a, .mobile-menu__panel button')].filter(el => el.offsetParent !== null);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+});
+
+const themeSections = [...document.querySelectorAll('[data-theme]')];
+function updateHeader() {
+  header?.classList.toggle('is-scrolled', window.scrollY > 18);
+  let light = false;
+  for (const section of themeSections) {
+    const rect = section.getBoundingClientRect();
+    if (rect.top <= 36 && rect.bottom > 36) { light = section.dataset.theme === 'light'; break; }
+  }
+  header?.classList.toggle('is-light', light);
+}
+
+/* Hero: original pointer parallax + exploded-layer scroll transition */
+const heroShell = document.querySelector('[data-hero-shell]');
+const heroSticky = heroShell?.querySelector('.hero-sticky');
+const heroStage = document.querySelector('[data-hero-stage]');
 const heroLayers = [...document.querySelectorAll('[data-parallax-layer]')];
 const heroContent = document.querySelector('[data-hero-content]');
-const menuToggle = document.querySelector('[data-menu-toggle]');
-const mobileMenu = document.querySelector('[data-mobile-menu]');
-const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-const themeToggle = document.querySelector('[data-theme-toggle]');
-const themeLabel = document.querySelector('[data-theme-label]');
-const themeColor = document.querySelector('meta[name="theme-color"]');
-const parallaxStrength = 2;
+const heroTransition = document.querySelector('[data-hero-transition]');
+const heroLight = document.querySelector('[data-hero-light]');
+const scrollCue = document.querySelector('[data-scroll-cue]');
+let heroProgress = 0;
+let pointerX = 0, pointerY = 0, currentX = 0, currentY = 0;
+let heroInView = true;
 
-function setTheme(theme, persist = false) {
-  const nextTheme = theme === 'light' ? 'light' : 'dark';
-  const switchTo = nextTheme === 'dark' ? 'светлую' : 'тёмную';
-  document.documentElement.dataset.theme = nextTheme;
-  themeToggle.setAttribute('aria-pressed', String(nextTheme === 'light'));
-  themeToggle.setAttribute('aria-label', `Включить ${switchTo} тему`);
-  themeLabel.textContent = nextTheme === 'dark' ? 'Светлая' : 'Тёмная';
-  themeColor.content = nextTheme === 'dark' ? '#27292e' : '#e8e6e7';
-
-  if (persist) {
-    try {
-      localStorage.setItem('gerbarium-theme', nextTheme);
-    } catch {
-      // The selected theme still applies when browser storage is unavailable.
-    }
+heroSticky?.addEventListener('pointermove', event => {
+  if (reduceMotion.matches || event.pointerType === 'touch' || heroProgress > .005) {
+    pointerX = 0;
+    pointerY = 0;
+    return;
   }
-}
-
-setTheme(document.documentElement.dataset.theme);
-themeToggle.addEventListener('click', () => {
-  setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark', true);
+  const rect = heroSticky.getBoundingClientRect();
+  pointerX = ((event.clientX - rect.left) / rect.width - .5) * 2;
+  pointerY = ((event.clientY - rect.top) / rect.height - .5) * 2;
 });
+heroSticky?.addEventListener('pointerleave', () => { pointerX = 0; pointerY = 0; });
 
-function updateHeader() {
-  const threshold = Math.max(hero.offsetHeight - 88, 80);
-  header.classList.toggle('is-scrolled', window.scrollY > threshold);
-}
+function updateHero() {
+  if (!heroShell || !heroStage) return;
+  const rect = heroShell.getBoundingClientRect();
+  heroInView = rect.bottom > 0 && rect.top < window.innerHeight;
+  const distance = Math.max(1, heroShell.offsetHeight - window.innerHeight);
+  heroProgress = reduceMotion.matches ? 0 : clamp(-rect.top / distance);
+  const p = heroProgress;
 
-updateHeader();
-window.addEventListener('scroll', updateHeader, { passive: true });
-window.addEventListener('resize', updateHeader);
-
-function closeMenu() {
-  menuToggle.setAttribute('aria-expanded', 'false');
-  mobileMenu.hidden = true;
-  header.classList.remove('menu-open');
-}
-
-function openMenu() {
-  menuToggle.setAttribute('aria-expanded', 'true');
-  mobileMenu.hidden = false;
-  header.classList.add('menu-open');
-}
-
-menuToggle.addEventListener('click', () => {
-  const isOpen = menuToggle.getAttribute('aria-expanded') === 'true';
-  isOpen ? closeMenu() : openMenu();
-});
-
-mobileMenu.querySelectorAll('a').forEach((link) => {
-  link.addEventListener('click', closeMenu);
-});
-
-document.addEventListener('click', (event) => {
-  if (mobileMenu.hidden) return;
-  if (!mobileMenu.contains(event.target) && !menuToggle.contains(event.target)) {
-    closeMenu();
-  }
-});
-
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !mobileMenu.hidden) {
-    closeMenu();
-    menuToggle.focus();
-  }
-});
-
-window.addEventListener('resize', () => {
-  if (window.innerWidth > 700 && !mobileMenu.hidden) closeMenu();
-});
-
-const navLinks = [...document.querySelectorAll('[data-nav]')];
-const observedSections = navLinks
-  .map((link) => document.getElementById(link.dataset.nav))
-  .filter(Boolean);
-
-const sectionObserver = new IntersectionObserver((entries) => {
-  entries.forEach((entry) => {
-    if (!entry.isIntersecting) return;
-    navLinks.forEach((link) => {
-      link.classList.toggle('is-active', link.dataset.nav === entry.target.id);
-    });
-  });
-}, { rootMargin: '-22% 0px -62% 0px', threshold: 0 });
-
-observedSections.forEach((section) => sectionObserver.observe(section));
-
-// Факты: прокручиваем — блоки сменяют друг друга на одном месте
-const factStack = document.querySelector('[data-fact-stack]');
-const factPanels = factStack ? [...factStack.querySelectorAll('[data-fact-panel]')] : [];
-let factActive = -1;
-let factTick = false;
-
-function updateFactStack() {
-  if (!factStack) return;
-  const rect = factStack.getBoundingClientRect();
-  const scrollable = rect.height - window.innerHeight;
-  if (scrollable <= 0) return;
-
-  const progress = Math.min(Math.max(-rect.top / scrollable, 0), 1);
-  const idx = Math.min(Math.floor(progress * factPanels.length), factPanels.length - 1);
-
-  if (idx !== factActive) {
-    factActive = idx;
-    factPanels.forEach((panel, i) => {
-      panel.classList.toggle('is-active', i === idx);
-      panel.classList.toggle('is-past', i < idx);
-    });
-  }
-}
-
-function onFactScroll() {
-  if (factTick) return;
-  factTick = true;
-  requestAnimationFrame(() => {
-    updateFactStack();
-    factTick = false;
-  });
-}
-
-window.addEventListener('scroll', onFactScroll, { passive: true });
-window.addEventListener('resize', onFactScroll);
-updateFactStack();
-
-// Семь плоскостей создают 2.5D-глубину без WebGL и тяжёлых библиотек.
-let pointerX = 0;
-let pointerY = 0;
-let currentX = 0;
-let currentY = 0;
-let currentScroll = 0;
-let heroFrame = 0;
-
-hero.addEventListener('pointermove', (event) => {
-  if (reduceMotion.matches || event.pointerType === 'touch') return;
-  const rect = hero.getBoundingClientRect();
-  pointerX = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
-  pointerY = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
-});
-
-hero.addEventListener('pointerleave', () => {
-  pointerX = 0;
-  pointerY = 0;
-});
-
-function renderHero() {
   if (reduceMotion.matches) {
-    heroLayers.forEach((layer) => { layer.style.transform = ''; });
-    heroContent.style.transform = '';
-    heroFrame = 0;
+    heroStage.style.cssText = '';
+    heroLayers.forEach(layer => { layer.style.cssText = ''; });
+    heroContent.style.cssText = '';
+    if (heroTransition) heroTransition.style.cssText = '';
+    if (heroLight) heroLight.style.cssText = '';
+    if (scrollCue) scrollCue.style.opacity = '1';
     return;
   }
 
-  const scrollTarget = Math.min(Math.max(window.scrollY / Math.max(hero.offsetHeight, 1), 0), 1);
-  currentX += (pointerX - currentX) * 0.075;
-  currentY += (pointerY - currentY) * 0.075;
-  currentScroll += (scrollTarget - currentScroll) * 0.09;
+  if (p > .005) { pointerX = 0; pointerY = 0; }
+  const scene = easeOut(clamp((p - .08) / .44));
+  const stageOpacity = 1 - clamp((p - .57) / .12);
+  const initialAnchor = mobile.matches ? -6.1 : -10.4;
+  const finalAnchor = mobile.matches ? -4 : -9.75;
+  const anchorOffset = initialAnchor + (finalAnchor - initialAnchor) * scene;
+  const heroStartScale = mobile.matches ? .74 : .7;
+  const heroEndScale = mobile.matches ? .42 : .5;
+  const heroScale = heroStartScale - scene * (heroStartScale - heroEndScale);
+  heroStage.style.transform = `translate3d(0,${anchorOffset}vh,0) rotateX(${scene * 23}deg) rotateY(${-scene * 13}deg) scale(${heroScale})`;
+  heroStage.style.opacity = stageOpacity.toFixed(3);
 
-  heroLayers.forEach((layer) => {
+  const titleFade = 1 - clamp(p / .19);
+  if (heroContent) {
+    heroContent.style.opacity = titleFade.toFixed(3);
+    heroContent.style.transform = `translate(-50%,-50%) translate3d(${-currentX * 10}px,${-currentY * 6 - p * 130}px,0) scale(${1 + p * .35})`;
+  }
+  if (scrollCue) scrollCue.style.opacity = (1 - clamp(p / .1)).toFixed(3);
+
+  if (heroTransition) {
+    const copyIn = clamp((p - .2) / .12);
+    const copyOut = 1 - clamp((p - .48) / .08);
+    heroTransition.style.opacity = (copyIn * copyOut).toFixed(3);
+    heroTransition.style.transform = `translate3d(0,${(1 - copyIn) * 24}px,0)`;
+  }
+  if (heroLight) {
+    const reveal = easeOut(clamp((p - .58) / .24));
+    heroLight.style.clipPath = `inset(${100 - reveal * 100}% 0 0)`;
+  }
+  renderHeroLayers();
+}
+
+function renderHeroLayers() {
+  if (!heroInView || reduceMotion.matches || !heroLayers.length) return;
+  const p = heroProgress;
+  const scene = easeOut(clamp((p - .08) / .44));
+  const pointerStrength = 1 - clamp(p / .08);
+  heroLayers.forEach((layer, index) => {
     const depth = Number(layer.dataset.depth);
-    const scrollDepth = Number(layer.dataset.scroll);
-
-    const x = -currentX * depth * 25 * parallaxStrength;
-    const y = (
-      -currentY * depth * 16
-      + currentScroll * scrollDepth
-    ) * parallaxStrength;
-
-    layer.style.transform =
-      `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
-  });
-
-  const titleX = -currentX * 5 * parallaxStrength;
-  const titleY = (
-    -currentY * 3
-    + currentScroll * 8
-  ) * parallaxStrength;
-  heroContent.style.transform = `translate(-50%, -50%) translate3d(${titleX.toFixed(2)}px, ${titleY.toFixed(2)}px, 0)`;
-  heroFrame = requestAnimationFrame(renderHero);
-}
-
-function startHeroMotion() {
-  if (!heroFrame) heroFrame = requestAnimationFrame(renderHero);
-}
-
-startHeroMotion();
-reduceMotion.addEventListener('change', startHeroMotion);
-
-// Слайдер сцен: переключение слайдов
-const scene = document.querySelector('[data-scene]');
-const slides = scene ? [...scene.querySelectorAll('[data-slide]')] : [];
-const prevSlideBtn = scene ? scene.querySelector('[data-slide-prev]') : null;
-const nextSlideBtn = scene ? scene.querySelector('[data-slide-next]') : null;
-const slideCurrentEl = scene ? scene.querySelector('[data-slide-current]') : null;
-let slideIndex = 0;
-let scenePointerX = 0;
-let scenePointerY = 0;
-let sceneCurrentX = 0;
-let sceneCurrentY = 0;
-let sceneFrame = 0;
-
-function activeSceneLayers() {
-  return [...slides[slideIndex].querySelectorAll('[data-scene-layer]')];
-}
-
-function showSlide(nextIndex) {
-  slideIndex = Math.max(0, Math.min(slides.length - 1, nextIndex));
-
-  slides.forEach((slide, i) => {
-    const isActive = i === slideIndex;
-    slide.classList.toggle('is-active', isActive);
-    slide.setAttribute('aria-hidden', String(!isActive));
-  });
-
-  // Стрелок может не быть — слайдер листается скроллом
-  if (prevSlideBtn) prevSlideBtn.disabled = slideIndex === 0;
-  if (nextSlideBtn) nextSlideBtn.disabled = slideIndex === slides.length - 1;
-  if (slideCurrentEl) slideCurrentEl.textContent = String(slideIndex + 1).padStart(2, '0');
-
-  // Сброс накопленного смещения, чтобы новая сцена не «дёргалась» с места
-  sceneCurrentX = 0;
-  sceneCurrentY = 0;
-}
-
-if (scene && slides.length) {
-  if (prevSlideBtn) prevSlideBtn.addEventListener('click', () => showSlide(slideIndex - 1));
-  if (nextSlideBtn) nextSlideBtn.addEventListener('click', () => showSlide(slideIndex + 1));
-
-  scene.addEventListener('keydown', (event) => {
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      showSlide(slideIndex - 1);
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      showSlide(slideIndex + 1);
-    }
-  });
-
-  showSlide(0);
-
-  scene.addEventListener('pointermove', (event) => {
-    if (reduceMotion.matches || event.pointerType === 'touch') return;
-    const rect = scene.getBoundingClientRect();
-    scenePointerX = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
-    scenePointerY = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
-  });
-
-  scene.addEventListener('pointerleave', () => {
-    scenePointerX = 0;
-    scenePointerY = 0;
+    const x = -currentX * depth * 42 * pointerStrength;
+    const y = -currentY * depth * 26 * pointerStrength;
+    const splitY = (index - 2) * 46 * scene;
+    const splitZ = (index - 2) * 145 * scene;
+    layer.style.transform = `translate3d(${x.toFixed(2)}px,${(y + splitY).toFixed(2)}px,${splitZ.toFixed(2)}px) scale(${1 + scene * .045})`;
   });
 }
 
-function renderScene() {
+function heroFrame() {
+  if (heroInView && !reduceMotion.matches) {
+    currentX += (pointerX - currentX) * .075;
+    currentY += (pointerY - currentY) * .075;
+    renderHeroLayers();
+  }
+  requestAnimationFrame(heroFrame);
+}
+requestAnimationFrame(heroFrame);
+
+/* Launcher: diagonal hover flip and tap equivalent */
+const launcherCard = document.querySelector('[data-launcher-card]');
+const launcherFlip = document.querySelector('[data-launcher-flip]');
+launcherFlip?.addEventListener('click', () => {
+  const flipped = !launcherCard.classList.contains('is-flipped');
+  launcherCard.classList.toggle('is-flipped', flipped);
+  launcherFlip.setAttribute('aria-pressed', String(flipped));
+});
+
+/* Arrow-driven islands with rotating information cards */
+const islandShowcase = document.querySelector('[data-island-showcase]');
+const islandImage = document.querySelector('[data-island-image]');
+const islandDots = [...document.querySelectorAll('[data-island-dot]')];
+const islands = [
+  {
+    id: 'winter', name: 'Зима', image: './assets/images/island-winter.webp',
+    alt: 'Левитирующий зимний Minecraft-остров с тайгой и кузницей',
+    description: 'Заснеженная тайга, ледяные пики и тёплый свет кузниц. Суровый край, где ремесло начинается с огня.',
+    biome: 'Тайга', level: 'Высокая сложность', craft: 'Металлургия<br>и ковка',
+    perk: 'Редкие руды, сложные сплавы и кузницы позволяют создавать особенно прочное снаряжение.',
+  },
+  {
+    id: 'desert', name: 'Пустыня', image: './assets/images/island-desert.webp',
+    alt: 'Левитирующий пустынный Minecraft-остров с базаром, рудами и оазисом',
+    description: 'Золотые дюны, караванные пути и шумные рынки. Богатство здесь всегда соседствует с риском.',
+    biome: 'Пески и оазисы', level: 'Средняя сложность', craft: 'Драгоценные металлы<br>и торговля',
+    perk: 'Золото и редкие минералы поддерживают экономику, караваны и выгодный обмен между игроками.',
+  },
+  {
+    id: 'plains', name: 'Равнины', image: './assets/images/island-plains.webp',
+    alt: 'Левитирующий равнинный Minecraft-остров с фермами и ветряной мельницей',
+    description: 'Плодородные поля, фермы и тихие деревни. Остров для тех, кто хочет построить устойчивый живой мир.',
+    biome: 'Луга', level: 'Мягкий старт', craft: 'Сельскохозяйственное<br>ремесло',
+    perk: 'Развитые фермы, животноводство и переработка урожая создают ресурсы для всего архипелага.',
+  },
+  {
+    id: 'jungle', name: 'Джунгли', image: './assets/images/island-jungle.webp',
+    alt: 'Левитирующий Minecraft-остров джунглей с алхимическими руинами и зельями',
+    description: 'Влажные тропики, древние руины и редкие растения. Здесь природа может стать лекарством или оружием.',
+    biome: 'Тропики', level: 'Средняя сложность', craft: 'Яды, зелья<br>и болезни',
+    perk: 'Необычные ингредиенты открывают алхимию, цепочки заболеваний, лечения и опасных отравлений.',
+  },
+];
+let activeIsland = 0;
+let islandBusy = false;
+let islandShowingBack = false;
+const islandFaces = {
+  identityFront: document.querySelector('[data-island-card="identity"] .island-card__front'),
+  identityBack: document.querySelector('[data-island-card="identity"] .island-card__back'),
+  advantageFront: document.querySelector('[data-island-card="advantage"] .island-card__front'),
+  advantageBack: document.querySelector('[data-island-card="advantage"] .island-card__back'),
+};
+const identityMarkup = (island, index) => `
+  <div class="island-card__content">
+    <p class="island-kicker" data-island-kicker>Остров ${String(index + 1).padStart(2, '0')} / 04</p>
+    <h3 data-island-name>${island.name}</h3>
+    <p class="island-description" data-island-description>${island.description}</p>
+    <div class="island-tags"><span data-island-biome>${island.biome}</span><span data-island-level>${island.level}</span></div>
+  </div>`;
+const advantageMarkup = island => `
+  <div class="island-card__content">
+    <p>Особенность острова</p>
+    <strong data-island-craft>${island.craft}</strong>
+    <span data-island-perk>${island.perk}</span>
+  </div>`;
+islands.forEach(island => { const preload = new Image(); preload.src = island.image; });
+
+function renderIsland(index, { preserveBack = false, updateImage = true } = {}) {
+  const island = islands[index];
+  if (!islandShowcase || !island) return;
+  islandShowcase.dataset.island = island.id;
+  if (updateImage && islandImage) {
+    islandImage.src = island.image;
+    islandImage.alt = island.alt;
+  }
+  if (islandFaces.identityFront) islandFaces.identityFront.innerHTML = identityMarkup(island, index);
+  if (islandFaces.advantageFront) islandFaces.advantageFront.innerHTML = advantageMarkup(island);
+  if (!preserveBack) {
+    if (islandFaces.identityBack) islandFaces.identityBack.innerHTML = identityMarkup(island, index);
+    if (islandFaces.advantageBack) islandFaces.advantageBack.innerHTML = advantageMarkup(island);
+  }
+  islandDots.forEach((button, i) => {
+    button.classList.toggle('is-active', i === index);
+    button.setAttribute('aria-pressed', String(i === index));
+  });
+}
+renderIsland(0);
+
+const wait = duration => new Promise(resolve => window.setTimeout(resolve, duration));
+
+async function setIsland(index) {
+  if (!islandShowcase || islandBusy) return;
+  const next = (index + islands.length) % islands.length;
+  if (next === activeIsland) return;
   if (reduceMotion.matches) {
-    if (slides.length) activeSceneLayers().forEach((layer) => { layer.style.transform = ''; });
-    sceneCurrentX = 0;
-    sceneCurrentY = 0;
-    sceneFrame = 0;
+    activeIsland = next;
+    renderIsland(next);
     return;
   }
 
-  const rect = scene.getBoundingClientRect();
+  const island = islands[next];
+  const startedAt = performance.now();
+  const nextImage = new Image();
+  nextImage.src = island.image;
+  const imageReady = nextImage.decode().catch(() => {});
+  const incomingSide = islandShowingBack ? 'Front' : 'Back';
+  const outgoingSide = islandShowingBack ? 'Back' : 'Front';
+  const incomingIdentity = islandFaces[`identity${incomingSide}`];
+  const incomingAdvantage = islandFaces[`advantage${incomingSide}`];
 
-  // За пределами видимости цикл останавливается и ждёт IntersectionObserver.
-  if (rect.bottom < 0 || rect.top > window.innerHeight) {
-    sceneFrame = 0;
-    return;
-  }
+  islandBusy = true;
+  if (incomingIdentity) incomingIdentity.innerHTML = identityMarkup(island, next);
+  if (incomingAdvantage) incomingAdvantage.innerHTML = advantageMarkup(island);
+  void islandShowcase.offsetWidth;
 
-  sceneCurrentX += (scenePointerX - sceneCurrentX) * 0.075;
-  sceneCurrentY += (scenePointerY - sceneCurrentY) * 0.075;
+  islandShowingBack = !islandShowingBack;
+  islandShowcase.classList.remove('is-returning');
+  islandShowcase.classList.add('is-changing');
+  islandShowcase.classList.toggle('is-flipped', islandShowingBack);
 
-  activeSceneLayers().forEach((layer) => {
-    const depth = Number(layer.dataset.depth);
-    const x = -sceneCurrentX * depth * 1.1 * parallaxStrength;
-    const y = -sceneCurrentY * depth * 1.0 * parallaxStrength;
-    layer.style.transform = `translate3d(${x.toFixed(3)}%, ${y.toFixed(3)}%, 0)`;
+  [incomingIdentity, incomingAdvantage].forEach(face => {
+    face?.querySelector('.island-card__content')?.animate([
+      { opacity: 0, transform: 'translateY(10px)' },
+      { opacity: 1, transform: 'translateY(0)' },
+    ], {
+      delay: 400,
+      duration: 380,
+      easing: 'cubic-bezier(.22,1,.36,1)',
+      fill: 'backwards',
+    });
   });
 
-  sceneFrame = requestAnimationFrame(renderScene);
-}
+  await wait(430);
+  activeIsland = next;
+  islandShowcase.dataset.island = island.id;
+  if (islandFaces[`identity${outgoingSide}`])
+    islandFaces[`identity${outgoingSide}`].innerHTML = identityMarkup(island, next);
+  if (islandFaces[`advantage${outgoingSide}`])
+    islandFaces[`advantage${outgoingSide}`].innerHTML = advantageMarkup(island);
+  islandDots.forEach((button, i) => {
+    button.classList.toggle('is-active', i === next);
+    button.setAttribute('aria-pressed', String(i === next));
+  });
 
-function startSceneMotion() {
-  if (!scene || sceneFrame) return;
-  const rect = scene.getBoundingClientRect();
-  const nearViewport = rect.bottom > -window.innerHeight * 0.2
-    && rect.top < window.innerHeight * 1.2;
-  if (nearViewport) {
-    sceneFrame = requestAnimationFrame(renderScene);
+  await imageReady;
+  if (islandImage) {
+    islandImage.src = island.image;
+    islandImage.alt = island.alt;
+    await islandImage.decode().catch(() => {});
+  }
+
+  await wait(Math.max(0, 540 - (performance.now() - startedAt)));
+  islandShowcase.classList.add('is-returning');
+  await wait(Math.max(280, 880 - (performance.now() - startedAt)));
+
+  islandShowcase.classList.remove('is-changing', 'is-returning');
+  ['identity', 'advantage'].forEach(type => {
+    islandFaces[`${type}Front`]?.setAttribute('aria-hidden', String(islandShowingBack));
+    islandFaces[`${type}Back`]?.setAttribute('aria-hidden', String(!islandShowingBack));
+  });
+  islandBusy = false;
+}
+document.querySelector('[data-island-prev]')?.addEventListener('click', () => setIsland(activeIsland - 1));
+document.querySelector('[data-island-next]')?.addEventListener('click', () => setIsland(activeIsland + 1));
+islandDots.forEach((button, index) => button.addEventListener('click', () => setIsland(index)));
+islandShowcase?.addEventListener('keydown', event => {
+  if (event.key === 'ArrowLeft') { event.preventDefault(); setIsland(activeIsland - 1); }
+  if (event.key === 'ArrowRight') { event.preventDefault(); setIsland(activeIsland + 1); }
+});
+let islandTouchStart = null;
+islandShowcase?.addEventListener('pointerdown', event => {
+  if (event.pointerType === 'touch') islandTouchStart = event.clientX;
+}, { passive: true });
+islandShowcase?.addEventListener('pointerup', event => {
+  if (islandTouchStart === null || event.pointerType !== 'touch') return;
+  const delta = event.clientX - islandTouchStart;
+  islandTouchStart = null;
+  if (Math.abs(delta) > 55) setIsland(activeIsland + (delta < 0 ? 1 : -1));
+}, { passive: true });
+
+/* Five-stage crafting workbench: material, blade, components, assembly, finishing */
+const workbench = document.querySelector('[data-sword-workbench]');
+const swordParts = [...document.querySelectorAll('[data-sword-part]')];
+const materialBlock = document.querySelector('[data-material-block]');
+const craftNext = document.querySelector('[data-craft-next]');
+const craftPrev = document.querySelector('[data-craft-prev]');
+const craftVisualCaption = document.querySelector('[data-craft-visual-caption]');
+const craftStageNumber = document.querySelector('[data-craft-stage-number]');
+const craftStageDescription = document.querySelector('[data-craft-stage-description]');
+let activeCraftStage = -1;
+
+const craftStages = [
+  { name: 'Материал', caption: 'Исходный слиток', description: 'Выберите материал — он определит внешний вид меча.' },
+  { name: 'Обработка', caption: 'Клинок после обработки', description: 'Слиток обрабатывается и принимает форму клинка.' },
+  { name: 'Детали', caption: 'Компоненты перед сборкой', description: 'Гарда, рукоять и навершие подготовлены к сборке.' },
+  { name: 'Сборка', caption: 'Собранный меч', description: 'Все детали соединяются в единое снаряжение.' },
+  { name: 'Доводка', caption: 'Готовое снаряжение', description: 'Финальная доводка завершает создание меча.' },
+];
+
+const craftPartStates = {
+  blade: [
+    { opacity: 0, x: 0, y: 5, r: 0 }, { opacity: 1, x: 0, y: -7, r: -3 },
+    { opacity: 1, x: 0, y: -15, r: -4 }, { opacity: 1, x: 0, y: 0, r: 0 }, { opacity: 1, x: 0, y: 0, r: 0 },
+  ],
+  guard: [
+    { opacity: 0, x: 0, y: 0, r: 0 }, { opacity: 0, x: 0, y: 0, r: 0 },
+    { opacity: 1, x: -31, y: 5, r: -14 }, { opacity: 1, x: 0, y: 0, r: 0 }, { opacity: 1, x: 0, y: 0, r: 0 },
+  ],
+  grip: [
+    { opacity: 0, x: 0, y: 0, r: 0 }, { opacity: 0, x: 0, y: 0, r: 0 },
+    { opacity: 1, x: 25, y: 15, r: 13 }, { opacity: 1, x: 0, y: 0, r: 0 }, { opacity: 1, x: 0, y: 0, r: 0 },
+  ],
+  pommel: [
+    { opacity: 0, x: 0, y: 0, r: 0 }, { opacity: 0, x: 0, y: 0, r: 0 },
+    { opacity: 1, x: 34, y: 27, r: 24 }, { opacity: 1, x: 0, y: 0, r: 0 }, { opacity: 1, x: 0, y: 0, r: 0 },
+  ],
+};
+
+function setCraftStage(index) {
+  index = clamp(index, 0, craftStages.length - 1);
+  if (index === activeCraftStage) return;
+  activeCraftStage = index;
+  const stage = craftStages[index];
+  if (workbench) workbench.dataset.stage = String(index);
+  if (craftVisualCaption) craftVisualCaption.textContent = `${String(index + 1).padStart(2, '0')} — ${stage.caption}`;
+  if (craftStageNumber) craftStageNumber.textContent = String(index + 1).padStart(2, '0');
+  if (craftStageDescription) craftStageDescription.textContent = stage.description;
+  craftPrev?.setAttribute('aria-label', `Предыдущий этап: ${craftStages[(index + craftStages.length - 1) % craftStages.length].name}`);
+  craftNext?.setAttribute('aria-label', `Следующий этап: ${craftStages[(index + 1) % craftStages.length].name}`);
+  if (materialBlock) {
+    materialBlock.style.opacity = index === 0 ? '1' : '0';
+    materialBlock.style.transform = `translate(-50%,-50%) translate3d(0,${index === 0 ? 0 : -30}px,0) rotate(${index === 0 ? -4 : 10}deg) scale(${index === 0 ? 1 : .8})`;
+  }
+  const spread = mobile.matches ? .65 : 1;
+  swordParts.forEach(part => {
+    const state = craftPartStates[part.dataset.swordPart][index];
+    const mobileLift = mobile.matches && index === 2 && part.dataset.swordPart !== 'blade' ? -8 : 0;
+    part.style.opacity = String(state.opacity);
+    part.style.transform = `translate3d(${state.x * spread}%,${state.y * spread + mobileLift}%,0) rotate(${state.r}deg)`;
+  });
+  if (workbench) {
+    workbench.style.setProperty('--sword-glow', index === 4 ? '1' : index === 3 ? '.45' : '0');
+    workbench.style.setProperty('--sword-rotate', index === 4 ? '5deg' : index === 3 ? '-2deg' : '-7deg');
   }
 }
+setCraftStage(0);
+craftNext?.addEventListener('click', () => setCraftStage((activeCraftStage + 1) % craftStages.length));
+craftPrev?.addEventListener('click', () => setCraftStage((activeCraftStage + craftStages.length - 1) % craftStages.length));
+workbench?.addEventListener('keydown', event => {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  event.preventDefault();
+  const direction = event.key === 'ArrowRight' ? 1 : -1;
+  setCraftStage((activeCraftStage + direction + craftStages.length) % craftStages.length);
+});
 
-window.addEventListener('scroll', startSceneMotion, { passive: true });
-window.addEventListener('resize', startSceneMotion);
+const finishNames = { steel: 'сталь', bronze: 'бронза', dark: 'тёмный металл' };
+const finishButtons = [...document.querySelectorAll('[data-finish]')].filter(button => button.tagName === 'BUTTON');
+const variantStatus = document.querySelector('[data-variant-status]');
+finishButtons.forEach(button => button.addEventListener('click', () => {
+  const finish = button.dataset.finish;
+  finishButtons.forEach(other => {
+    const active = other === button;
+    other.classList.toggle('is-active', active);
+    other.setAttribute('aria-pressed', String(active));
+  });
+  if (workbench) workbench.dataset.finish = finish;
+  if (variantStatus) variantStatus.textContent = `Выбран материал: ${finishNames[finish]}`;
+}));
 
-if (scene) {
-  reduceMotion.addEventListener('change', startSceneMotion);
+/* Accessible before/after climate slider */
+const climateCompare = document.querySelector('[data-climate-compare]');
+const climateRange = document.querySelector('[data-climate-range]');
+let climateInteracted = false;
+let climateAnimation = 0;
+
+function setClimateValue(value) {
+  if (!climateCompare || !climateRange) return;
+  const next = clamp(Number(value), 0, 100);
+  climateRange.value = String(next);
+  climateCompare.style.setProperty('--split', `${next}%`);
+}
+climateRange?.addEventListener('input', event => {
+  climateInteracted = true;
+  cancelAnimationFrame(climateAnimation);
+  setClimateValue(event.target.value);
+});
+climateRange?.addEventListener('pointerdown', () => {
+  climateInteracted = true;
+  cancelAnimationFrame(climateAnimation);
+});
+
+if (climateCompare && 'IntersectionObserver' in window && !reduceMotion.matches) {
+  const climateObserver = new IntersectionObserver(entries => {
+    if (!entries[0].isIntersecting || climateInteracted) return;
+    climateObserver.disconnect();
+    const start = performance.now();
+    const animate = now => {
+      if (climateInteracted) return;
+      const t = clamp((now - start) / 1500);
+      let value;
+      if (t < .48) value = 50 + (18 - 50) * easeOut(t / .48);
+      else if (t < .78) value = 18 + (68 - 18) * easeOut((t - .48) / .3);
+      else value = 68 + (50 - 68) * easeOut((t - .78) / .22);
+      setClimateValue(value);
+      if (t < 1) climateAnimation = requestAnimationFrame(animate);
+    };
+    climateAnimation = requestAnimationFrame(animate);
+  }, { threshold: .55 });
+  climateObserver.observe(climateCompare);
 }
 
-// Сцена островов: слова загораются -> текст растворяется -> слайдер листается скроллом
-const isleStage = document.querySelector('[data-isle-stage]');
+/* Countdown and real calendar download */
+const countdown = document.querySelector('[data-countdown]');
+const launchOpen = document.querySelector('[data-launch-open]');
+const launchDate = new Date(countdown?.dataset.launchDate || '2026-12-19T18:00:00+03:00');
+const cd = {
+  d: document.querySelector('[data-cd="d"]'),
+  h: document.querySelector('[data-cd="h"]'),
+  m: document.querySelector('[data-cd="m"]'),
+  s: document.querySelector('[data-cd="s"]'),
+};
+const pad = value => String(value).padStart(2, '0');
+function updateCountdown() {
+  const difference = launchDate.getTime() - Date.now();
+  if (difference <= 0) {
+    if (countdown) countdown.hidden = true;
+    if (launchOpen) launchOpen.hidden = false;
+    const calendarButton = document.querySelector('[data-calendar]');
+    if (calendarButton) calendarButton.hidden = true;
+    return;
+  }
+  const seconds = Math.floor(difference / 1000);
+  const values = {
+    d: pad(Math.floor(seconds / 86400)),
+    h: pad(Math.floor((seconds % 86400) / 3600)),
+    m: pad(Math.floor((seconds % 3600) / 60)),
+    s: pad(seconds % 60),
+  };
+  Object.entries(values).forEach(([key, value]) => { if (cd[key]) cd[key].textContent = value; });
+  window.setTimeout(updateCountdown, 1000 - (Date.now() % 1000));
+}
+updateCountdown();
 
-if (isleStage && !reduceMotion.matches && slides.length) {
-  const leadText = isleStage.querySelector('[data-isle-lead-text]');
-  const sliderBox = isleStage.querySelector('[data-isle-slider]');
+document.querySelector('[data-calendar]')?.addEventListener('click', () => {
+  const end = new Date(launchDate.getTime() + 2 * 60 * 60 * 1000);
+  const formatICS = date => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Gerbarium//Server Launch//RU',
+    'CALSCALE:GREGORIAN', 'BEGIN:VEVENT', `UID:launch-${launchDate.getTime()}@gerbarium`,
+    `DTSTAMP:${formatICS(new Date())}`, `DTSTART:${formatICS(launchDate)}`, `DTEND:${formatICS(end)}`,
+    'SUMMARY:Открытие сервера Gerbarium',
+    'DESCRIPTION:Minecraft 1.20.1 — выживание среди четырёх островов.',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n');
+  const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'gerbarium-launch.ics';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const feedback = document.querySelector('[data-calendar-feedback]');
+  if (feedback) feedback.textContent = 'Событие для календаря загружено.';
+});
 
-  function wrapWords(node) {
-    [...node.childNodes].forEach((child) => {
-      if (child.nodeType === Node.TEXT_NODE) {
-        const fragment = document.createDocumentFragment();
-        child.textContent.split(/(\s+)/).forEach((part) => {
-          if (!part.trim()) {
-            fragment.appendChild(document.createTextNode(part));
-          } else {
-            const span = document.createElement('span');
-            span.className = 'isle-stage__word';
-            span.textContent = part;
-            fragment.appendChild(span);
-          }
-        });
-        node.replaceChild(fragment, child);
-      } else if (child.nodeType === Node.ELEMENT_NODE) {
-        wrapWords(child);
-      }
+/* Entrance motion never controls content visibility */
+const revealElements = [...document.querySelectorAll('.reveal')];
+if ('IntersectionObserver' in window && !reduceMotion.matches) {
+  const revealObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      revealObserver.unobserve(entry.target);
+      entry.target.animate([
+        { transform: 'translate3d(0,22px,0) scale(.985)' },
+        { transform: 'translate3d(0,0,0) scale(1)' },
+      ], { duration: 600, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'none' });
     });
-  }
-
-  wrapWords(leadText);
-  const leadWords = [...isleStage.querySelectorAll('.isle-stage__word')];
-
-  // высота сцены: 1 экран на слова + 0.6 на кросс-фейд + по экрану на слайд
-  isleStage.style.height = `${(1.6 + slides.length) * 100}vh`;
-
-  const WORDS_END = 0.4;
-  const FADE_END = 0.55;
-  let stageTick = false;
-  let stageSlideShown = -1;
-
-  function updateIsleStage() {
-    const rect = isleStage.getBoundingClientRect();
-    const scrollable = rect.height - window.innerHeight;
-    if (scrollable <= 0) return;
-
-    const p = Math.min(Math.max(-rect.top / scrollable, 0), 1);
-
-    if (p < WORDS_END) {
-      // фаза 1: слова зажигаются
-      const lit = Math.floor((p / WORDS_END) * leadWords.length);
-      leadWords.forEach((word, i) => word.classList.toggle('is-on', i < lit));
-      leadText.style.opacity = '1';
-      leadText.style.filter = 'none';
-      sliderBox.style.opacity = '0';
-      sliderBox.style.pointerEvents = 'none';
-    } else if (p < FADE_END) {
-      // фаза 2: текст растворяется, слайдер проявляется на его месте
-      const t = (p - WORDS_END) / (FADE_END - WORDS_END);
-      leadText.style.opacity = String(1 - t);
-      leadText.style.filter = `blur(${(t * 10).toFixed(1)}px) brightness(${(1 - t * 0.55).toFixed(2)})`;
-      sliderBox.style.opacity = String(t);
-      sliderBox.style.pointerEvents = t > 0.6 ? 'auto' : 'none';
-    } else {
-      // фаза 3: скролл листает слайды
-      leadText.style.opacity = '0';
-      sliderBox.style.opacity = '1';
-      sliderBox.style.pointerEvents = 'auto';
-      leadWords.forEach((word) => word.classList.add('is-on'));
-
-      const sp = (p - FADE_END) / (1 - FADE_END);
-      const idx = Math.min(Math.floor(sp * slides.length), slides.length - 1);
-      if (idx !== stageSlideShown) {
-        stageSlideShown = idx;
-        showSlide(idx);
-      }
-    }
-  }
-
-  window.addEventListener('scroll', () => {
-    if (stageTick) return;
-    stageTick = true;
-    requestAnimationFrame(() => {
-      updateIsleStage();
-      stageTick = false;
-    });
-  }, { passive: true });
-
-  window.addEventListener('resize', updateIsleStage);
-  updateIsleStage();
+  }, { threshold: .12, rootMargin: '0px 0px -5% 0px' });
+  revealElements.forEach(element => revealObserver.observe(element));
 }
+
+/* One scheduled update per scroll frame */
+let scrollQueued = false;
+function updateAll() {
+  scrollQueued = false;
+  updateHeader();
+  updateHero();
+}
+function queueUpdate() {
+  if (scrollQueued) return;
+  scrollQueued = true;
+  requestAnimationFrame(updateAll);
+}
+window.addEventListener('scroll', queueUpdate, { passive: true });
+window.addEventListener('resize', queueUpdate, { passive: true });
+mobile.addEventListener('change', () => {
+  const stage = activeCraftStage;
+  activeCraftStage = -1;
+  setCraftStage(stage);
+  queueUpdate();
+});
+reduceMotion.addEventListener('change', queueUpdate);
+updateAll();
