@@ -448,3 +448,33 @@ button{cursor:pointer}
   .hero-sticky{position:relative}
   .hero-transition-copy,.hero-light{display:none}
 }
+
+.atlas-intro .container {
+  position: relative;
+}
+
+.atlas-intro .section-lead {
+  position: absolute;
+  left: 40%;
+  bottom: 0px;
+  max-width: 5200px;
+  margin: 0;
+}
+
+/* Поднимаем острова */
+.island-visual {
+  transform: translateY(-60px);
+}
+
+/* На телефонах текст остаётся под заголовком */
+@media (max-width: 767px) {
+  .atlas-intro .section-lead {
+    position: static;
+    max-width: 100%;
+    margin: 24px 0 0;
+  }
+
+  .island-visual {
+    transform: translateY(-20px);
+  }
+}
